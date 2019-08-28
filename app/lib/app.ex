@@ -84,7 +84,7 @@ defmodule FindValidVampires do
           #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, mid+1, len-mid-1) , charlists: :as_lists}")
           #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, 0, mid) , charlists: :as_lists}")
           ans=findVampires(val, Enum.slice(residual_list, mid+1, len-mid-1), target)
-          ans++findVampires(val, Enum.slice(residual_list, 0, mid), target)
+          ans++findVampires(val, Enum.slice(residual_list, 0, mid), target)++findVampires(val, [Enum.at(residual_list,mid)], target)
       end
     end
   end
@@ -109,10 +109,10 @@ defmodule App do
       digits_arr = Enum.sort(digits_arr)
       list = ListLoop.getPossibleNumsArray(digits_arr, digits>>>1, 0, 0) |> Enum.uniq |> Enum.sort
       x=FindValidVampires.findVampiresRecurse(list, num)
+      #IO.puts("#{num}  #{inspect digits_arr , charlists: :as_lists} #{inspect list , charlists: :as_lists}")
       if length(x)>0 do
         IO.puts("#{num}  #{inspect x, charlists: :as_lists}")
       end
-      #IO.puts("#{num}  #{inspect digits_arr , charlists: :as_lists} #{inspect list , charlists: :as_lists}")
     else
       []
     end
@@ -149,7 +149,7 @@ defmodule App do
       getVampireList(endNum)
     else
       #IO.puts ("Find vampire numbers called for range " <> Integer.to_string(startNum) <>
-       #        " to " <> Integer.to_string(endNum) <> " Parent Ref: #{inspect parentRef}")
+      #         " to " <> Integer.to_string(endNum) <> " Parent Ref: #{inspect parentRef}")
 
       startNumTask = Task.async(App, :getUpperEvenDigitInt, [startNum])
       endNumTask = Task.async(App, :getLowerEvenDigitInt, [endNum])
@@ -161,13 +161,13 @@ defmodule App do
         mid_low = startNum + ((endNum - startNum)>>>1)
         mid_high = mid_low + 1
 
-        midLowTask = Task.async(App, :getUpperEvenDigitInt, [mid_low])
-        midHighTask = Task.async(App, :getLowerEvenDigitInt, [mid_high])
+        midLowTask = Task.async(App, :getLowerEvenDigitInt, [mid_low])
+        midHighTask = Task.async(App, :getUpperEvenDigitInt, [mid_high])
         mid_low = Task.await(midLowTask)
         mid_high = Task.await(midHighTask)
-        mid_low = getLowerEvenDigitInt(mid_low)
-        mid_high = getUpperEvenDigitInt(mid_high)
-
+        #mid_low = getLowerEvenDigitInt(mid_low)
+        #mid_high = getUpperEvenDigitInt(mid_high)
+        #IO.puts("#{startNum} #{mid_low} #{mid_high} #{endNum}")
         #running the same over interval now
         t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
         t2=Task.async(App, :findVampireNumbers , [mid_high, endNum, self()])
