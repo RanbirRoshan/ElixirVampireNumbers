@@ -5,16 +5,20 @@ defmodule Main do
   server_self_3= %ServerInfo{port: 52002, ip: ['192.168.0.50']}
   server_self_4= %ServerInfo{port: 52003, ip: ['192.168.0.50']}
 
-  {:ok, pid} = AppTCPServer.start_link([])
-  #Logger.info("Genserver started with pid: #{inspect pid}")
+  {:ok, pid} = AppTCPServer.start([])
+  #Process.flag(pid, :trap_exit, true)
+  Logger.info("Genserver started with pid: #{inspect pid}")
   spawn fn-> AppTCPServer.accept(server_self.port, pid) end
-  {:ok, pid} = AppTCPServer.start_link([])
-  #Logger.info("Genserver started with pid: #{inspect pid}")
+  {:ok, pid} = AppTCPServer.start([])
+  #Process.flag(pid, :trap_exit, true)
+  Logger.info("Genserver started with pid: #{inspect pid}")
   spawn fn-> AppTCPServer.accept(server_self_2.port, pid) end
-  {:ok, pid} = AppTCPServer.start_link([])
-  #Logger.info("Genserver started with pid: #{inspect pid}")
+  {:ok, pid} = AppTCPServer.start([])
+  #Process.flag(pid, :trap_exit, true)
+  Logger.info("Genserver started with pid: #{inspect pid}")
   spawn fn-> AppTCPServer.accept(server_self_4.port, pid) end
-  {:ok, pid} = AppTCPServer.start_link([])
-  #Logger.info("Genserver started with pid: #{inspect pid}")
+  {:ok, pid} = AppTCPServer.start([])
+  #Process.flag(pid, :trap_exit, true)
+  Logger.info("Genserver started with pid: #{inspect pid}")
   AppTCPServer.accept(server_self_3.port, pid)
 end

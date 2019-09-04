@@ -84,26 +84,20 @@ defmodule FindValidVampires do
       len = length(residual_list)
       mid = 0 + (len>>>1)
       midProd = val*Enum.at(residual_list,mid)
-      #IO.puts("findVampires #{inspect self()} #{inspect residual_list , charlists: :as_lists}, #{val}, #{target}")
-      #IO.puts("#{midProd}")
       cond do
         midProd < target ->
           if (len != mid+1) do
-            #IO.puts("Slice1 #{inspect self()}  #{inspect Enum.slice(residual_list, mid+1, len-mid-1) , charlists: :as_lists}")
             findVampires(val, Enum.slice(residual_list, mid+1, len-mid-1), target)
           else
             []
           end
         midProd > target ->
           if (mid>0) do
-            #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, 0, mid) , charlists: :as_lists}")
             findVampires(val, Enum.slice(residual_list, 0, mid), target)
           else
             []
           end
         true ->
-          #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, mid+1, len-mid-1) , charlists: :as_lists}")
-          #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, 0, mid) , charlists: :as_lists}")
           ans=findVampires(val, Enum.slice(residual_list, mid+1, len-mid-1), target)
           ans++findVampires(val, Enum.slice(residual_list, 0, mid), target)++findVampires(val, [Enum.at(residual_list,mid)], target)
       end
@@ -116,7 +110,6 @@ defmodule FindVampTCPStruct do
   defstruct startNum: 0, operationName: "", endNum: 0, parentRef: self()
 
   def decodeFunction(data) do
-    #IO.puts("FindVampTCPStruct #{inspect data}")
     ret = Map.new data, fn({key, value}) ->
       {String.to_atom(key), value}
     end
@@ -134,7 +127,6 @@ defmodule App do
   def getVampireList(num) do
 
     #debug info print
-    #IO.puts ("Checking if a number is a vampire number. Number is #{num}")
     digits_arr = Integer.digits(num, 10)
     digits = length(digits_arr)
 
@@ -142,9 +134,9 @@ defmodule App do
     if ((digits&&&1) == 0) do
       digits_arr = Enum.sort(digits_arr)
       ListLoop.getPossibleNumsArray(digits_arr, digits>>>1, 0, 0, self())
-      list = receive() |> Enum.uniq |> Enum.sort
+      ret= receive()
+      list = ret |> Enum.uniq |> Enum.sort
       x=FindValidVampires.findVampiresRecurse(list, num)
-      #IO.puts("#{num}  #{inspect digits_arr , charlists: :as_lists} #{inspect list , charlists: :as_lists}")
 
       if length(x)>0 do
 
@@ -154,7 +146,6 @@ defmodule App do
           end
         end
 
-        IO.puts("#{num} #{out_list}")
          %{num => x}
       else
         %{}
@@ -186,6 +177,8 @@ defmodule App do
 
   defp receive() do
     receive do
+      {_a, {:response, msg}} -> msg
+      {:response, msg} -> msg
       msg ->  msg
     end
   end
@@ -239,14 +232,14 @@ defmodule App do
       #end
 
       if (server_count == 0) do
-        IO.puts ("server_count == 0")
         t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
-        findVampireNumbers(mid_high, endNum, self()) ++ Task.await(t1, 1000000)
+        t2=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
+        Map.merge(Task.await(t2,100000), Task.await(t1, 1000000))
       end
 
       #send both request to server
       x=if (pos < server_count-1) do
-        IO.puts ("pos < server_count-1)")
+
 
         #prepare struct to be sent and serialize the same to JSON
         send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: startNum, endNum: mid_low, parentRef: "#{inspect self()}"}
@@ -260,18 +253,18 @@ defmodule App do
         #{:ok, data} = Jason.encode(send_data)
 
         #send the request to the remote server for processing
-        AppTCPServer.sendTCPData(Enum.at(state, pos+1), send_data)
+        AppTCPServer.sendTCPData(Enum.at(state, pos), send_data)
 
         #wait for message to be received from both the servers
-        IO.puts("waitning for goof )))))))))))))))))))))))))))))))))))))")
-        x = Map.merge(receive(), receive())
-        IO.puts("hi ans : #{inspect x}")
-        x
+        Map.merge(receive(), receive())
+
+      else
+        %{}
       end
 
       #send one request to server and process one by self
+      x =
       if (pos >= server_count-1) do
-        IO.puts("pos >= server_count-1")
 
         #prepare struct to be sent and serialize the same to JSON
         send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, parentRef: "#{inspect self()}"}
@@ -280,7 +273,10 @@ defmodule App do
         #send the request to the remote server for processing
         AppTCPServer.sendTCPData(Enum.at(state, rem(pos+1, server_count)), send_data)
 
-        findVampireNumbers(startNum, mid_low, self(), state, server_count) ++ receive()
+        t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0])
+        Task.await(t1, 1000000) ++ receive()
+      else
+        x
       end
       x
     else
@@ -294,7 +290,6 @@ defmodule App do
     ans =
     cond do
       request.operationName == "findVampireNumbers"->
-        IO.puts("Work")
         t = Task.async(App, :findVampireNumbers, [request.startNum, request.endNum, self(), servers, length(servers)])
         Task.await(t, 10000000)
       true -> []

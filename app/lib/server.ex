@@ -25,32 +25,38 @@ end
 
 defmodule AppTCPServer do
   require Logger
-  use GenServer
+  use GenServer, restart: :permanent
 
   @request_str "request"
-  @response_str "response"
+#  @response_str "response"
   @connect_others "connect_others"
   @execute_task "execute_task"
 
   @impl true
+  def terminate(state, reason) do
+    Logger.info("Termination. Reason: #{reason}. State: #{inspect state}")
+  end
+
+  @impl true
   def init(init_arg) do
+    Process.flag(:trap_exit, false)
     {:ok, init_arg}
   end
 
   #@impl true
-  def start_link(initial_state) do
+  def start(initial_state) do
     #Logger.info("Starting server with an inital state: #{inspect initial_state}")
-    GenServer.start_link(__MODULE__, initial_state, [])
+    GenServer.start(__MODULE__, initial_state, [])
   end
 
   def connect(server_list, genserver_pid) do
     for server <- server_list do
       other = List.delete(Enum.at(Enum.chunk_by(server_list, &(&1 == server)),0), server)
-      GenServer.call(genserver_pid,{:connect,server,other}, 1000000)
+      GenServer.call(genserver_pid,{:connect,server,other, genserver_pid}, 1000000)
     end
   end
 
-  def connect(server, others, state) do
+  def connect(server, others, state, genPid) do
     #Logger.info("Connecting to server #{inspect server}.")
 
     opts=[keepalive: true, nodelay: true, active: false, delay_send: false, reuseaddr: true]
@@ -63,29 +69,24 @@ defmodule AppTCPServer do
 
       data = %TCPReq{type: @request_str, pid: 0, operation: @connect_others, data: [other]}
       {:ok, response} = Jason.encode(data)
-      #IO.inspect(others)
-      #IO.puts(response)
       write_line(socket, response)
     end
 
-    spawn fn -> serve(socket, self()) end
+    spawn fn -> serveMe(socket, genPid, "") end
     #Logger.info("#{inspect self()}  Total known server: #{length(state)}")
     state
   end
 
   @impl true
-  def handle_call({:connect_others, server, _genserver_pid}, _from, state) do
+  def handle_call({:connect_others, server, genserver_pid}, _from, state) do
     server = ServerInfo.decodeFunction(server)
-    #IO.inspect(state)
-    ###IO.puts("Conencting to other server #{inspect server}")
-    state = connect(server, [], state)
+    state = connect(server, [], state, genserver_pid)
     {:reply, :ok, state}
   end
 
   @impl true
-  def handle_call({:connect, server, others}, _from, state) do
-    state= connect(server, others, state)
-    #IO.inspect(state)
+  def handle_call({:connect, server, others, genPid}, _from, state) do
+    state= connect(server, others, state, genPid)
     {:reply, :ok, state}
   end
 
@@ -99,18 +100,16 @@ defmodule AppTCPServer do
 
   @impl true
   def handle_call({:getAllVampiresInRange, range_start, range_end}, _from, state) do
-    #t = Task.async(App, :findVampireNumbers, [range_start, range_end, self(), state, length(state)])
-    #val = Task.await(t, 1000000)
-    val = App.findVampireNumbers(range_start, range_end, self(), state, length(state))
-    IO.puts("Final ans #{inspect val}")
+
+    t = Task.async(App, :findVampireNumbers, [range_start, range_end, self(), state, length(state)])
+    val = Task.await(t, 1000000)
+    #val = App.findVampireNumbers(range_start, range_end, self(), state, length(state))
     {:reply, val, state}
   end
 
   @impl true
-  def handle_call({:execute_task, data, genserver_pid}, _from, state) do
-    res = App.executeTask(data, state)
-    IO.puts("#{inspect self()} Task ans #{inspect res}")
-    {:reply, res, state}
+  def handle_call({:get_state}, _from, state) do
+    {:reply, state, state}
   end
 
   def accept(port, genserver_pid) do
@@ -127,7 +126,7 @@ defmodule AppTCPServer do
       #{:ok, buffer_pid} = Buffer.create()
       Process.flag(:trap_exit, true)
       GenServer.call(genserver_pid, {:addServer, client}, 100000)
-      serve(client, genserver_pid)
+      serveMe(client, genserver_pid, "")
     end
     loop_acceptor(socket, genserver_pid)
   end
@@ -136,18 +135,14 @@ defmodule AppTCPServer do
 
     data = %TCPReq{type: @request_str, pid: "#{inspect self()}", operation: @execute_task, data: data}
     {:ok, response} = Jason.encode(data)
-    IO.puts("sending request to #{inspect socket} data: #{response}")
     write_line(socket, response)
   end
 
-  defp serve(socket, genserver_pid) do
-    data_list = socket |> read_line()
-    IO.puts("#{inspect self} Connection Recieved #{data_list}")
+  defp serveMe(socket, genPid, old_trailing) do
+    {data, trailing} = socket |> read_line(old_trailing)
     spawn fn ->
-      for data <- data_list do
+      #for data <- data_list do
         #if data != "" do
-          data = String.replace_suffix(data, "$", "")
-          #IO.puts("#{inspect self()} #{inspect data} #{inspect data_list}"); #req = String.split(data,","); IO.inspect(req)
           {:ok, data} = Jason.decode(data)# (data, as: %TCPReq)
           #IO.inspect(data)
           data = TCPReq.decodeFunction(data)
@@ -155,17 +150,16 @@ defmodule AppTCPServer do
           if (data.type == @request_str) do
             cond do
               data.operation == @connect_others ->
-                GenServer.call(genserver_pid, {:connect_others,Enum.at(data.data,0), genserver_pid}, 1000000)
+                GenServer.call(genPid, {:connect_others,Enum.at(data.data,0, genPid), genPid}, 1000000)
                 u=%TCPReq{type: "response",operation: 0, data: "Connected"}
                 {_response, y}=Jason.encode(u)
                 write_line(socket, y)
               data.operation == @execute_task ->
-                IO.puts("#{inspect self()} tasking")
-                res = GenServer.call(genserver_pid, {:execute_task, data.data, genserver_pid}, 1000000)
-                IO.puts("#{inspect self()} Task result recieved #{inspect res}")
+                servers = GenServer.call(genPid, {:get_state})
+                #res = GenServer.call(genPid, {:execute_task, data.data, genPid}, 1000000)
+                res = App.executeTask(data.data, servers)
                 u=%TCPReq{type: "response",operation: 0, data: res, pid: data.pid}
                 {_response, y}=Jason.encode(u)
-                IO.puts("sending")
                 write_line(socket, y)
               true ->
                 u=%TCPReq{type: "response", pid: 1, operation: 0, data: ["Invalid Operation"]}
@@ -173,26 +167,42 @@ defmodule AppTCPServer do
                 write_line(socket, y)
             end
           else
-            Logger.info("Response Recieved: #{inspect data}")
             if (data.pid != "") do
               len = String.length(data.pid)
               send :erlang.list_to_pid(String.to_charlist(String.slice(data.pid, 4, len-4))), data.data
             end
           end
         #end
-      end
+      #end
     end
-    IO.puts("#{inspect self} Waiting for next Connection Recieved")
-    serve(socket, genserver_pid)
+    spawn fn -> serveMe(socket, genPid, trailing) end
   end
 
-  defp read_line(socket) do
-    {:ok, data} = :gen_tcp.recv(socket, 0)
-    IO.puts("#{inspect self()} #{inspect data}")
-    data = String.split(to_string(data), "$") |> Enum.reject(fn x -> x=="" end)
-    #IO.puts("#{inspect self()} after split #{data}")
-    #IO.puts("#{inspect self()} after split 2 #{inspect data}")
-    data
+  defp parseString(str) do
+    {leading, trailing} = :string.take(str, [36], true)
+    #IO.puts("leading: #{leading} trailing:#{trailing} str:#{str}")
+    cond do
+      leading == "" ->
+        {_waste, trailing} = :string.take(trailing, [36], false)
+        {leading, trailing}
+      trailing == "" ->
+        {trailing, leading}
+      true ->
+        {_waste, trailing} = :string.take(trailing, [36], false)
+        {leading, trailing}
+    end
+  end
+
+  defp read_line(socket, previous_trailing) do
+    {leading, trailing} = parseString(previous_trailing)
+    if (leading != "") do
+      {leading, trailing}
+    else
+      {:ok, data} = :gen_tcp.recv(socket, 0)
+      #data = String.split(to_string(data), "$") |> Enum.reject(fn x -> x=="" end)
+      data = trailing <> to_string(data)
+      read_line(socket, data)
+    end
   end
 
   def write_line(socket, line) do
