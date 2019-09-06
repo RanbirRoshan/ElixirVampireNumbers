@@ -23,8 +23,22 @@ defmodule ListLoop do
 
   def doRecurse(list, len, cur_len, val, position) do
     elem = Enum.at(list, position)
-    r_task = Task.async(ListLoop, :doRecurse, [list, len, cur_len, val, position+1])
-    getPossibleNumsArray(List.delete(list, elem), len, cur_len+1, val*10 + elem) ++ Task.await(r_task)
+    #if (rem(position, 2) == 0) do
+    #  r_task = Task.async(ListLoop, :doRecurse, [list, len, cur_len, val, position+1])
+    #  if elem==0 && val == 0 do
+    #    Task.await(r_task)
+    #  else
+    #    getPossibleNumsArray(List.delete(list, elem), len, cur_len+1, val*10 + elem) ++ Task.await(r_task)
+    #  end
+    #else
+    ans = doRecurse(list, len, cur_len, val, position+1)
+    if elem==0 && val == 0 do
+      ans
+    else
+      getPossibleNumsArray(List.delete(list, elem), len, cur_len+1, val*10 + elem) ++ ans
+    end
+    #end
+
   end
 end
 import Bitwise
@@ -36,11 +50,12 @@ defmodule FindValidVampires do
   def findVampiresRecurse(list, target) do
     val = Enum.at(list, 0)
     residual_list = List.delete(list, val)
-    recTask = Task.async(FindValidVampires, :findVampiresRecurse, [residual_list, target])
-    findVampires(val, residual_list, target) ++ Task.await(recTask)
+    #recTask = Task.async(FindValidVampires, :findVampiresRecurse, [residual_list, target])
+    ans = findVampiresRecurse(residual_list, target)
+    findVampires(val, residual_list, target) ++ ans#Task.await(recTask, 100000)
   end
 
-  def findVampires(_val, residual_list, target) when length(residual_list)==0 do
+  def findVampires(_val, residual_list, _target) when length(residual_list)==0 do
     []
   end
 
@@ -111,10 +126,14 @@ defmodule App do
       x=FindValidVampires.findVampiresRecurse(list, num)
       #IO.puts("#{num}  #{inspect digits_arr , charlists: :as_lists} #{inspect list , charlists: :as_lists}")
       if length(x)>0 do
-        IO.puts("#{num}  #{inspect x, charlists: :as_lists}")
+        %{num => x}
+      else
+        %{}
       end
+
+
     else
-      []
+      %{}
     end
   end
 
@@ -151,33 +170,43 @@ defmodule App do
       #IO.puts ("Find vampire numbers called for range " <> Integer.to_string(startNum) <>
       #         " to " <> Integer.to_string(endNum) <> " Parent Ref: #{inspect parentRef}")
 
-      startNumTask = Task.async(App, :getUpperEvenDigitInt, [startNum])
-      endNumTask = Task.async(App, :getLowerEvenDigitInt, [endNum])
-      startNum = Task.await(startNumTask)
-      endNum = Task.await(endNumTask)
+      #startNumTask = Task.async(App, :getUpperEvenDigitInt, [startNum])
+      #endNumTask = Task.async(App, :getLowerEvenDigitInt, [endNum])
+      #startNum = Task.await(startNumTask)
+      #endNum = Task.await(endNumTask)
+      startNum = getUpperEvenDigitInt(startNum)
+      endNum = getLowerEvenDigitInt(endNum)
 
+
+      ans =
       if endNum > startNum do
 
         mid_low = startNum + ((endNum - startNum)>>>1)
         mid_high = mid_low + 1
 
-        midLowTask = Task.async(App, :getLowerEvenDigitInt, [mid_low])
-        midHighTask = Task.async(App, :getUpperEvenDigitInt, [mid_high])
-        mid_low = Task.await(midLowTask)
-        mid_high = Task.await(midHighTask)
+        #midLowTask = Task.async(App, :getLowerEvenDigitInt, [mid_low])
+        #midHighTask = Task.async(App, :getUpperEvenDigitInt, [mid_high])
+        #mid_low = Task.await(midLowTask)
+        #mid_high = Task.await(midHighTask)
         #mid_low = getLowerEvenDigitInt(mid_low)
         #mid_high = getUpperEvenDigitInt(mid_high)
         #IO.puts("#{startNum} #{mid_low} #{mid_high} #{endNum}")
         #running the same over interval now
         t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
-        t2=Task.async(App, :findVampireNumbers , [mid_high, endNum, self()])
-        Task.await(t1)
-        Task.await(t2)
-
+        #t2=Task.async(App, :findVampireNumbers , [mid_high, endNum, self()])
+        ans = findVampireNumbers(mid_high, endNum, self())
+        ans2 = Task.await(t1)
+        Map.merge(ans, ans2)
+        #Task.await(t2)
+      else
+        %{}
       end
 
+      ans =
       if endNum==startNum do
         getVampireList(endNum)
+      else
+        ans
       end
 
     end
