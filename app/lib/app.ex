@@ -1,10 +1,15 @@
 import Bitwise
 
 defmodule ListLoop do
-  @doc """
-  getPossibleNumsArray The code to end the recursion in the function
-  """
-  def getPossibleNumsArray(_list, len, cur_len, val, parent, _servers) when len==cur_len do
+  use GenServer
+
+  def start(initial_state) do
+    #Logger.info("Starting server with an inital state: #{inspect initial_state}")
+    GenServer.start(__MODULE__, initial_state, [])
+  end
+
+  def getPossibleNumsArray(list, len, cur_len, val, parent, servers, pos \\ 0)
+  def getPossibleNumsArray(_list, len, cur_len, val, parent, _servers, _pos) when len==cur_len do
     digit_count = Integer.digits(val, 10) |> length
 
     # consider only the values that are of required length
@@ -17,24 +22,34 @@ defmodule ListLoop do
     end
   end
 
-  def getPossibleNumsArray(list, len, cur_len, val, parent, servers) do
-    doRecurse(list, len, cur_len, val, 0, parent, servers)
+  def getPossibleNumsArray(list, len, cur_len, val, parent, servers, pos) do
+    #IO.puts("called #{inspect parent} is parent of #{inspect self()}")
+    doRecurse(list, len, cur_len, val, 0, parent, servers,  pos)
   end
 
-  def doRecurse(list, len, cur_len, val, position, parent, servers, pos \\ 0) do
+  def doRecurse(list, len, cur_len, val, position, parent, servers, pos) do
+    #IO.puts("#{inspect self()} #{inspect parent}")
     if (position >= length(list) or position < 0) do
       send(parent, {:response, []})
     else
-      #getPossibleNumsArray(List.delete(list, elem), len, cur_len+1, val*10 + elem) ++ doRecurse(list, len, cur_len, val, position+1)
-      Task.async(ListLoop, :doRecurse, [list, len, cur_len, val, position+1, self(), servers, rem(pos+1, length(servers)+)])
       elem = Enum.at(list, position)
+      #List.delete(list, elem)
+      #getPossibleNumsArray(List.delete(list, elem), len, cur_len+1, val*10 + elem) ++ doRecurse(list, len, cur_len, val, position+1)
+      Task.async(ListLoop, :doRecurse, [list, len, cur_len, val, position+1, self(), servers, pos+1])
+
       if elem==0 && val==0 do
         ans=getData()
+        #IO.puts("#{inspect list} #{inspect ans}")
         send(parent, {:response, ans})
       else
-        #ans = getPossibleNumsArray(List.delete(list, elem), len, cu r_len+1, val*10 + elem) ++ Task.await(r_task, 100000)
         Task.async(ListLoop, :getPossibleNumsArray, [List.delete(list, elem), len, cur_len+1, val*10 + elem, self(), servers, pos+2])
-        ans = getData() ++ getData()
+        #ans = getPossibleNumsArray(List.delete(list, elem), len, cu r_len+1, val*10 + elem)
+        ans = getData()
+        #IO.puts("#{inspect self()} ans 1 #{inspect ans}")
+        ans2 = getData()
+        #IO.puts("#{inspect self()} ans 2 #{inspect ans2}")
+        ans = ans ++ ans2
+        #IO.puts("#{inspect self()} combined #{inspect ans}")
         send(parent, {:response,ans})
       end
     end
@@ -53,11 +68,11 @@ defmodule FindValidVampires do
   end
 
   def findVampiresRecurse(list, target) do
-    val = Enum.at(list, 0)
+    val           = Enum.at(list, 0)
     residual_list = List.delete(list, val)
-    #recTask = Task.async(FindValidVampires, :findVampiresRecurse, [residual_list, target])
-    #findVampires(val, residual_list, target) ++ Task.await(recTask)
-    findVampires(val, residual_list, target) ++ findVampiresRecurse(residual_list, target)
+    ans           = findVampiresRecurse(residual_list, target)
+
+    findVampires(val, residual_list, target) ++ ans
   end
 
   def findVampires(_val, residual_list, _target) when length(residual_list)==0 do
@@ -66,13 +81,15 @@ defmodule FindValidVampires do
 
 
   def findVampires(val, residual_list, target) do
-    if (length(residual_list)==1) do
+    if (length(residual_list) == 1) do
       other_num = Enum.at(residual_list, 0)
-      if ((val * other_num == target) and !(rem(val,10)==0 and rem(other_num, 10)==0)) do
-        digits = Integer.digits(val, 10) ++ Integer.digits(other_num, 10) |> Enum.sort
-        tdigit = Integer.digits(target, 10) |> Enum.sort
+      if ((val * other_num == target) and !(rem(val, 10) == 0 and rem(other_num, 10) == 0)) do
+        digits = Integer.digits(val, 10) ++ Integer.digits(other_num, 10)
+                 |> Enum.sort
+        tdigit = Integer.digits(target, 10)
+                 |> Enum.sort
         if digits === tdigit do
-          [[val,other_num]]
+          [[val, other_num]]
         else
           []
         end
@@ -81,24 +98,46 @@ defmodule FindValidVampires do
       end
     else
       len = length(residual_list)
-      mid = 0 + (len>>>1)
-      midProd = val*Enum.at(residual_list,mid)
+      mid = 0 + (len >>> 1)
+      other = Enum.at(residual_list, mid)
+      midProd = val * other
+
       cond do
         midProd < target ->
-          if (len != mid+1) do
-            findVampires(val, Enum.slice(residual_list, mid+1, len-mid-1), target)
+          if (len != mid + 1) do
+
+            findVampires(val, Enum.slice(residual_list, mid + 1, len - mid - 1), target)
           else
             []
           end
+
         midProd > target ->
-          if (mid>0) do
+          if (mid > 0) do
+
             findVampires(val, Enum.slice(residual_list, 0, mid), target)
           else
             []
           end
+
         true ->
-          ans=findVampires(val, Enum.slice(residual_list, mid+1, len-mid-1), target)
-          ans++findVampires(val, Enum.slice(residual_list, 0, mid), target)++findVampires(val, [Enum.at(residual_list,mid)], target)
+          #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, mid+1, len-mid-1) , charlists: :as_lists}")
+          #IO.puts("Slice2 #{inspect self()}  #{inspect Enum.slice(residual_list, 0, mid) , charlists: :as_lists}")
+          #ans = findVampires(val, Enum.slice(residual_list, mid + 1, len - mid - 1), target)
+          #ans ++ findVampires(val, Enum.slice(residual_list, 0, mid), target) ++ findVampires(val, [Enum.at(residual_list, mid)], target)
+          if (!(rem(val, 10) == 0 and rem(other, 10) == 0)) do
+            digits = Integer.digits(val, 10) ++ Integer.digits(other, 10)
+                     |> Enum.sort
+            tdigit = Integer.digits(target, 10)
+                     |> Enum.sort
+            if digits === tdigit do
+              [[val, other]] ++ findVampires(val, [Enum.at(residual_list, mid)], target)
+            else
+              findVampires(val, [Enum.at(residual_list, mid)], target)
+            end
+          else
+            findVampires(val, [Enum.at(residual_list, mid)], target)
+          end
+        #findVampires(val, [Enum.at(residual_list, mid)], target) ++ [[val, Enum.at(residual_list, mid)]]
       end
     end
   end
@@ -132,13 +171,16 @@ defmodule App do
     #vampire numbers are not possible for odd length numbers
     if ((digits&&&1) == 0) do
       digits_arr = Enum.sort(digits_arr)
-      ListLoop.getPossibleNumsArray(digits_arr, digits>>>1, 0, 0, self(), servers)
+      Task.async(ListLoop, :getPossibleNumsArray, [digits_arr, digits>>>1, 0, 0, self(), servers])
+      #{:ok, pid} = ListLoop.start([])
+      #GenServer.call(pid, {:getPossibleNumsArray, digits_arr, digits>>>1, 0, 0, self(), servers})
+      #ListLoop.getPossibleNumsArray(digits_arr, digits>>>1, 0, 0, self(), servers)
       ret= receive()
       list = ret |> Enum.uniq |> Enum.sort
-      x=FindValidVampires.findVampiresRecurse(list, num)
+      x=FindValidVampires.findVampiresRecurse(ret, num)
 
+      #IO.puts("Random #{num} #{inspect x} #{inspect list} #{inspect x}")
       if length(x)>0 do
-
         #out_list=for item <- x do
         #  for inner_items <- item do
         #    Integer.to_string(inner_items)<>" "
@@ -185,6 +227,7 @@ defmodule App do
   def findVampireNumbers(startNum, endNum, parentRef, state \\[], server_count \\ 0, pos \\0)
 
   def findVampireNumbers(startNum, endNum, _parentRef, state, _server_count, _pos) when startNum == endNum do
+    #IO.puts("#equal case #{startNum} #{endNum}")
     getVampireList(endNum, state)
   end
 
@@ -193,8 +236,8 @@ defmodule App do
   end
 
   def findVampireNumbers(startNum, endNum, parentRef, state, server_count, pos) do
-    IO.puts ("Find vampire numbers called for range " <> Integer.to_string(startNum) <>
-             " to " <> Integer.to_string(endNum) <> " Parent Ref: #{inspect parentRef}")
+    #IO.puts ("Find vampire numbers called for range " <> Integer.to_string(startNum) <>
+    #         " to " <> Integer.to_string(endNum) <> " Parent Ref: #{inspect parentRef}")
 
     #To avoid un-necessary processing we can trim the range to a more valid sub-set. Ex 5-555 can be trimmed to 10-99
     #as odd digit ranges are not valid in our scenario
@@ -203,6 +246,9 @@ defmodule App do
     endNumTask    = Task.async(App, :getLowerEvenDigitInt, [endNum])
     startNum      = Task.await(startNumTask, 10000)
     endNum        = Task.await(endNumTask, 10000)
+    if endNum == startNum && endNum == 1395 do
+      IO.puts("Executing for: #{endNum}")
+    end
 
     if endNum > startNum do
       #if (endNum-startNum < 10) do
@@ -273,7 +319,7 @@ defmodule App do
         AppTCPServer.sendTCPData(Enum.at(state, rem(pos+1, server_count)), send_data)
 
         t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0])
-        Task.await(t1, 1000000) ++ receive()
+        Map.merge(Task.await(t1, 1000000), receive())
       else
         x
       end
@@ -308,9 +354,9 @@ defmodule AppServerClient do
     GenServer.start_link(__MODULE__, @initial_state, [])
   end
 
-  def put_getPossibleNumsArray(pid, list, len, cur_len, val, servers) do
-    GenServer.call(pid, {:getPossibleNumsArray, list, len, cur_len, val, servers}, 1000000)
-  end
+  #def put_getPossibleNumsArray(pid, list, len, cur_len, val, servers) do
+  #  GenServer.call(pid, {:getPossibleNumsArray, list, len, cur_len, val, servers}, 1000000)
+  #end
 
   # server callbacks
 
@@ -322,17 +368,19 @@ defmodule AppServerClient do
   end
 
   @impl true
-  def handle_call({:getPossibleNumsArray, list, len, cur_len, val, servers}, _from, state) do
-    ListLoop.getPossibleNumsArray(list, len, cur_len, val, self(), servers)
+  def handle_call({:getPossibleNumsArray, list, len, cur_len, val, servers}, from, state) do
+    Task.async(ListLoop, :getPossibleNumsArray, [list, len, cur_len, val, self(), servers])
+    #ListLoop.getPossibleNumsArray()
     data = receive()
+    IO.puts("val returned : #{data}")
     {:reply, data, state}
   end
 
-  @impl true
-  def handle_cast({:getPossibleNumsArray, list, len, cur_len, val, servers}, state) do
-    data = ListLoop.getPossibleNumsArray(list, len, cur_len, val, self(), servers)
-    {:reply, data, state}
-  end
+  #@impl true
+  #def handle_cast({:getPossibleNumsArray, list, len, cur_len, val, servers, parent}, state) do
+  #  data = ListLoop.getdPossibleNumsArray(list, len, cur_len, val, parent, servers)
+  #  {:reply, data, state}
+  #end
 
   defp receive() do
     receive do

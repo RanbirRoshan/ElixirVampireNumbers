@@ -1,9 +1,9 @@
 defmodule Main do
   require Logger
-  server_self= %ServerInfo{port: 52000, ip: ['192.168.0.50']}
-  server_self_2= %ServerInfo{port: 52001, ip: ['192.168.0.50']}
-  server_self_3= %ServerInfo{port: 52002, ip: ['192.168.0.50']}
-  server_self_4= %ServerInfo{port: 52003, ip: ['192.168.0.50']}
+  server_self= %ServerInfo{port: 52000, ip: ['127.0.0.1']}
+  server_self_2= %ServerInfo{port: 52001, ip: ['127.0.0.1']}
+  server_self_3= %ServerInfo{port: 52002, ip: ['127.0.0.1']}
+  server_self_4= %ServerInfo{port: 52003, ip: ['127.0.0.1']}
 
   {:ok, pid} = AppTCPServer.start([])
   #Process.flag(pid, :trap_exit, true)
