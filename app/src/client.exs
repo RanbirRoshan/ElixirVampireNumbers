@@ -1,5 +1,8 @@
 defmodule Main do
   require Logger
+  [arg1, arg2] = System.argv
+  {arg1_val, _} = Integer.parse(arg1)
+  {arg2_val, _} = Integer.parse(arg2)
 
   #server1= %ServerInfo{port: 52000, ip: ['10.136.201.74']}
   #server2= %ServerInfo{port: 52000, ip: ['10.192.244.27']}
@@ -17,11 +20,19 @@ defmodule Main do
   Process.sleep(1000)
 
   servers = GenServer.call(pid, {:get_state})
-  #IO.inspect(servers)
-  #ans  = GenServer.call(pid, {:getAllVampiresInRange, 0, 10000},1000000)
-  #t = Task.async(App, :findVampireNumbers, [0, 10000, self(), servers, length(servers)])
-  #ans = Task.await(t, 1000000)
-  ans = App.findVampireNumbers(0, 10000, self(), servers, length(servers))
+  arg1_val =
+    if (arg1_val<1000) do
+      1000
+    else
+      arg1_val
+    end
+
+  ans =
+    if (arg2_val>999 && arg2_val >= arg1_val) do
+      App.findVampireNumbers(arg1_val, arg2_val, self(), servers, length(servers))
+    else
+      %{}
+    end
 
   Process.sleep(1000)
 
