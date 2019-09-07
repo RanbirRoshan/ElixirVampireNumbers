@@ -49,6 +49,7 @@ defmodule AppTCPServer do
     GenServer.start(__MODULE__, initial_state, [])
   end
 
+
   def connect(server_list, genserver_pid) do
     for server <- server_list do
       other = List.delete(Enum.at(Enum.chunk_by(server_list, &(&1 == server)),0), server)
@@ -62,6 +63,8 @@ defmodule AppTCPServer do
     opts=[keepalive: true, nodelay: true, active: false, delay_send: false, reuseaddr: true]
 
     {:ok, socket} = :gen_tcp.connect(Enum.at(server.ip,0), server.port, opts)
+
+    Logger.info("Connected to #{server.ip}:#{server.port}")
 
     state = state ++ [socket]
 
@@ -100,11 +103,14 @@ defmodule AppTCPServer do
 
   @impl true
   def handle_call({:getAllVampiresInRange, range_start, range_end}, _from, state) do
-
-    t = Task.async(App, :findVampireNumbers, [range_start, range_end, self(), state, length(state)])
-    val = Task.await(t, 1000000)
+    IO.inspect(state)
+    #t = Task.async(App, :findVampireNumbers, [0, 10000, self(), state, length(state)])
+    #ans = Task.await(t, 1000000)
+    ans = App.findVampireNumbers(0, 10000, self(), state, length(state), 0)
+    #t = Task.async(App, :findVampireNumbers, [range_start, range_end, self(), state, length(state)])
+    #val = Task.await(t, 1000000)
     #val = App.findVampireNumbers(range_start, range_end, self(), state, length(state))
-    {:reply, val, state}
+    {:reply, ans, state}
   end
 
   @impl true
@@ -115,15 +121,17 @@ defmodule AppTCPServer do
   def accept(port, genserver_pid) do
     {:ok, socket} =
       :gen_tcp.listen(port, [keepalive: true,  active: false, reuseaddr: true])
-    #Logger.info("Accepting connections on port #{port}")
+    Logger.info("Accepting connections on port #{port}")
     loop_acceptor(socket, genserver_pid)
   end
 
   defp loop_acceptor(socket, genserver_pid) do
 
     {:ok, client} = :gen_tcp.accept(socket)
+    {:ok, {peer_ip, port}} =:inet.peername(client)
+    #peer_ip = to_string(peer_ip)
+    Logger.info("Connected to #{inspect peer_ip}:#{port}")
     spawn fn ->
-      #{:ok, buffer_pid} = Buffer.create()
       Process.flag(:trap_exit, true)
       GenServer.call(genserver_pid, {:addServer, client}, 100000)
       serveMe(client, genserver_pid, "")
@@ -156,11 +164,15 @@ defmodule AppTCPServer do
                 write_line(socket, y)
               data.operation == @execute_task ->
                 servers = GenServer.call(genPid, {:get_state})
-                #res = GenServer.call(genPid, {:execute_task, data.data, genPid}, 1000000)
+
                 res = App.executeTask(data.data, servers)
+
                 u=%TCPReq{type: "response",operation: 0, data: res, pid: data.pid}
                 {_response, y}=Jason.encode(u)
+
                 write_line(socket, y)
+
+                Logger.info ("Response sent: #{inspect res, charlists: :as_lists}")
               true ->
                 u=%TCPReq{type: "response", pid: 1, operation: 0, data: ["Invalid Operation"]}
                 {_response, y}=Jason.encode(u)
