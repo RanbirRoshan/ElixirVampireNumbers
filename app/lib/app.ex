@@ -1,68 +1,38 @@
 import Bitwise
 
-defmodule ListLoop do
-  use GenServer
-
-  def init(init_arg) do
-    {:ok, init_arg}
-  end
-
-  def start(initial_state) do
-    #Logger.info("Starting server with an inital state: #{inspect initial_state}")
-    GenServer.start(__MODULE__, initial_state, [])
-  end
-
-  def getPossibleNumsArray(list, len, cur_len, val, parent, servers, pos \\ 0)
-  def getPossibleNumsArray(_list, len, cur_len, val, parent, _servers, _pos) when len==cur_len do
-    digit_count = Integer.digits(val, 10) |> length
+defmodule FindPossibleFactors do
+  @doc """
+  getPossibleNumsArray The code to end the recursion in the function
+  """
+  def getPossibleNumsArray(_list, len, cur_len, val) when len == cur_len do
+    digit_count = Integer.digits(val, 10)
+                  |> length
 
     # consider only the values that are of required length
     if digit_count == len do
-      #[val]
-      send(parent, {:response, [val]})
+      [val]
     else
-      #[]
-      send(parent, {:response, []})
+      []
     end
   end
 
-  def getPossibleNumsArray(list, len, cur_len, val, parent, servers, pos) do
-    #IO.puts("called #{inspect parent} is parent of #{inspect self()}")
-    doRecurse(list, len, cur_len, val, 0, parent, servers,  pos)
+  def getPossibleNumsArray(list, len, cur_len, val) do
+    doRecurse(list, len, cur_len, val, 0)
   end
 
-  def doRecurse(list, len, cur_len, val, position, parent, servers, pos) do
-    #IO.puts("#{inspect self()} #{inspect parent}")
-    if (position >= length(list) or position < 0) do
-      send(parent, {:response, []})
+  def doRecurse(list, _len, _cur_len, _val, position) when position >= length(list) or position < 0 do
+    []
+  end
+
+  def doRecurse(list, len, cur_len, val, position) do
+
+    elem = Enum.at(list, position)
+    ans  = doRecurse(list, len, cur_len, val, position + 1)
+
+    if elem == 0 && val == 0 do
+      ans
     else
-      elem = Enum.at(list, position)
-
-      Task.async(ListLoop, :doRecurse, [list, len, cur_len, val, position+1, self(), servers, pos+1])
-
-      if elem==0 && val==0 do
-        ans=getData()
-        send(parent, {:response, ans})
-      else
-        {:ok, pid} = ListLoop.start([])
-        GenServer.cast(pid, {:getPossibleNumsArray, List.delete(list, elem), len, cur_len+1, val*10 + elem, self(), servers, pos+2})
-
-        #Task.async(ListLoop, :getPossibleNumsArray, [List.delete(list, elem), len, cur_len+1, val*10 + elem, self(), servers, pos+2])
-        ans = getData() ++ getData()
-        send(parent, {:response,ans})
-      end
-    end
-  end
-
-  @impl true
-  def handle_cast({:getPossibleNumsArray, digits_arr, len, cur_len, val, parent, servers, pos}, state) do
-    spawn fn ->  ListLoop.getPossibleNumsArray(digits_arr, len, cur_len, val, parent, servers, pos) end
-    {:noreply, state}
-  end
-
-  defp getData() do
-    receive do
-      {:response, msg} -> msg
+      getPossibleNumsArray(List.delete(list, elem), len, cur_len + 1, val * 10 + elem) ++ ans
     end
   end
 end
@@ -143,7 +113,7 @@ end
 
 defmodule FindVampTCPStruct do
   @derive Jason.Encoder
-  defstruct startNum: 0, operationName: "", endNum: 0, parentRef: self()
+  defstruct startNum: 0, operationName: "", endNum: 0, full_range: 0, parentRef: self()
 
   def decodeFunction(data) do
     ret = Map.new data, fn({key, value}) ->
@@ -161,7 +131,7 @@ defmodule App do
   Documentation for App.
   """
 
-  def getVampireList(num, servers) do
+  def getVampireList(num, _servers) do
 
     #debug info print
     digits_arr = Integer.digits(num, 10)
@@ -170,9 +140,7 @@ defmodule App do
     #vampire numbers are not possible for odd length numbers
     if ((digits&&&1) == 0) do
       digits_arr = Enum.sort(digits_arr)
-      {:ok, pid} = ListLoop.start([])
-      GenServer.cast(pid, {:getPossibleNumsArray, digits_arr, digits>>>1, 0, 0, self(), servers, 0})
-      ret= receive()
+      ret= FindPossibleFactors.getPossibleNumsArray(digits_arr, digits>>>1, 0, 0)
       list = ret |> Enum.uniq |> Enum.sort
       x=FindValidVampires.findVampiresRecurse(list, num)
 
@@ -214,77 +182,93 @@ defmodule App do
     end
   end
 
-  def findVampireNumbers(startNum, endNum, parentRef, state \\[], server_count \\ 0, pos \\0)
+  def findVampireNumbers(startNum, endNum, parentRef, state \\[], server_count \\ 0, pos \\0, full_range)
 
-  def findVampireNumbers(startNum, endNum, _parentRef, state, _server_count, _pos) when startNum == endNum do
+  def findVampireNumbers(startNum, endNum, _parentRef, state, _server_count, _pos, _full_range) when startNum == endNum do
     getVampireList(endNum, state)
   end
 
-  def findVampireNumbers(startNum, endNum, _parentRef, _state, _server_count, _pos) when startNum > endNum do
+  def findVampireNumbers(startNum, endNum, _parentRef, _state, _server_count, _pos, _full_range) when startNum > endNum do
     %{}
   end
 
-  def findVampireNumbers(startNum, endNum, parentRef, state, server_count, pos) do
+  def findVampireNumbers(startNum, endNum, parentRef, state, server_count, pos, full_range) do
     #To avoid un-necessary processing we can trim the range to a more valid sub-set. Ex 5-555 can be trimmed to 10-99
     #as odd digit ranges are not valid in our scenario
     #Note: these are also very small task and need not be sent to different machines
     startNum = getUpperEvenDigitInt(startNum)
     endNum = getLowerEvenDigitInt(endNum)
+    local_range = Integer.digits(endNum) |> length()
+    local_range = :math.pow(10, local_range - 3)
+    bucket_size = full_range/local_range |> round()
 
     if endNum > startNum do
 
-      mid_low = startNum + ((endNum - startNum)>>>1)
-      mid_high = mid_low + 1
+      if (endNum-startNum) > bucket_size do
 
-      if (server_count == 0) do
-        t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
-        t2=Task.async(App, :findVampireNumbers , [startNum, mid_low, self()])
-        Map.merge(Task.await(t2,100000), Task.await(t1, 1000000))
-      end
+        mid_low = startNum + ((endNum - startNum)>>>1)
+        mid_high = mid_low + 1
 
-      #send both request to server
-      x=if (pos < server_count-1) do
+        if (server_count == 0) do
+          t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
+          t2=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
+          Map.merge(Task.await(t2,100000), Task.await(t1, 1000000))
+        end
+
+        #send both request to server
+        x=if (pos < server_count-1) do
 
 
-        #prepare struct to be sent and serialize the same to JSON
-        send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: startNum, endNum: mid_low, parentRef: "#{inspect self()}"}
-        #{:ok, data} = Jason.encode(send_data)
+          #prepare struct to be sent and serialize the same to JSON
+          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: startNum, endNum: mid_low, full_range: full_range, parentRef: "#{inspect self()}"}
+          #{:ok, data} = Jason.encode(send_data)
 
-        #send the request to the remote server for processing
-        AppTCPServer.sendTCPData(Enum.at(state, pos+1), send_data)
+          #send the request to the remote server for processing
+          AppTCPServer.sendTCPData(Enum.at(state, pos+1), send_data)
 
-        #prepare struct to be sent and serialize the same to JSON
-        send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, parentRef: "#{inspect self()}"}
-        #{:ok, data} = Jason.encode(send_data)
+          #prepare struct to be sent and serialize the same to JSON
+          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, full_range: full_range, parentRef: "#{inspect self()}"}
+          #{:ok, data} = Jason.encode(send_data)
 
-        #send the request to the remote server for processing
-        AppTCPServer.sendTCPData(Enum.at(state, pos), send_data)
+          #send the request to the remote server for processing
+          AppTCPServer.sendTCPData(Enum.at(state, pos), send_data)
 
-        #wait for message to be received from both the servers
-        Map.merge(receive(), receive())
+          #wait for message to be received from both the servers
+          Map.merge(receive(), receive())
 
-      else
-        %{}
-      end
+        else
+          %{}
+        end
 
-      #send one request to server and process one by self
-      x =
-      if (pos >= server_count-1) do
+        #send one request to server and process one by self
+        x =
+        if (pos >= server_count-1) do
 
-        #prepare struct to be sent and serialize the same to JSON
-        send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, parentRef: "#{inspect self()}"}
+          #prepare struct to be sent and serialize the same to JSON
+          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, full_range: full_range, endNum: endNum, parentRef: "#{inspect self()}"}
 
-        #send the request to the remote server for processing
-        AppTCPServer.sendTCPData(Enum.at(state, rem(pos+1, server_count)), send_data)
+          #send the request to the remote server for processing
+          AppTCPServer.sendTCPData(Enum.at(state, rem(pos+1, server_count)), send_data)
 
-        t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0])
-        Map.merge(Task.await(t1, 1000000), receive())
-      else
+          t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0, full_range])
+          Map.merge(Task.await(t1, 1000000), receive())
+        else
+          x
+        end
         x
+      else
+        res =
+          for i <- startNum..endNum do
+            getVampireList(i, state)
+          end
+        Enum.reduce(res, fn x, acc ->
+          Map.merge(x, acc, fn _key, map1, map2 ->
+            for {k, v1} <- map1, into: %{}, do: {k, v1 + map2[k]}
+          end)
+        end)
       end
-      x
     else
-      findVampireNumbers(startNum, endNum, parentRef, state, server_count, pos)
+      findVampireNumbers(startNum, endNum, parentRef, state, server_count, pos, full_range)
     end
   end
 
@@ -295,7 +279,7 @@ defmodule App do
     cond do
       request.operationName == "findVampireNumbers"->
         Logger.info("Request received : findVampireNumbers for range (#{request.startNum}, #{request.endNum})")
-        t = Task.async(App, :findVampireNumbers, [request.startNum, request.endNum, self(), servers, length(servers)])
+        t = Task.async(App, :findVampireNumbers, [request.startNum, request.endNum, self(), servers, length(servers), request.full_range])
         Task.await(t, 10000000)
       true -> []
     end

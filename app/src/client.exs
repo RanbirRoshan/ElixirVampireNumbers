@@ -4,8 +4,8 @@ defmodule Main do
   {arg1_val, _} = Integer.parse(arg1)
   {arg2_val, _} = Integer.parse(arg2)
 
-  #server1= %ServerInfo{port: 52000, ip: ['10.136.201.74']}
-  #server2= %ServerInfo{port: 52000, ip: ['10.192.244.27']}
+  #server1= %ServerInfo{port: 52001, ip: ['192.168.0.88']}
+  #server2= %ServerInfo{port: 52000, ip: ['192.168.']}
   server1= %ServerInfo{port: 52000, ip: ['127.0.0.1']}
   server2= %ServerInfo{port: 52001, ip: ['127.0.0.1']}
   #server3= %ServerInfo{port: 52002, ip: ['127.0.0.1']}
@@ -29,7 +29,7 @@ defmodule Main do
 
   ans =
     if (arg2_val>999 && arg2_val >= arg1_val) do
-      App.findVampireNumbers(arg1_val, arg2_val, self(), servers, length(servers))
+      App.findVampireNumbers(arg1_val, arg2_val, self(), servers, length(servers), 0, arg2_val-arg1_val)
     else
       %{}
     end
