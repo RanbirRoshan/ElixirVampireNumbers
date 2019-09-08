@@ -4,14 +4,14 @@ defmodule Main do
   {arg1_val, _} = Integer.parse(arg1)
   {arg2_val, _} = Integer.parse(arg2)
 
-  #server1= %ServerInfo{port: 52001, ip: ['192.168.0.88']}
-  #server2= %ServerInfo{port: 52000, ip: ['192.168.']}
-  server1= %ServerInfo{port: 52000, ip: ['127.0.0.1']}
-  server2= %ServerInfo{port: 52001, ip: ['127.0.0.1']}
-  #server3= %ServerInfo{port: 52002, ip: ['127.0.0.1']}
+  server1= %ServerInfo{port: 52001, ip: ['192.168.0.88']}
+  server2= %ServerInfo{port: 52000, ip: ['192.168.0.100']}
+  #server1= %ServerInfo{port: 52000, ip: ['127.0.0.1']}
+  #server2= %ServerInfo{port: 52001, ip: ['127.0.0.1']}
+  server3= %ServerInfo{port: 52003, ip: ['192.168.0.32']}
   #server4= %ServerInfo{port: 52003, ip: ['127.0.0.1']}
   #x=[server1, server2, server3, server4]
-  x=[server1, server2]
+  x=[server1, server2, server3]
 
   {:ok, pid} = AppTCPServer.start([])
   #Logger.info("Genserver client started with pid: #{inspect pid}")

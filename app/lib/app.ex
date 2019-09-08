@@ -224,14 +224,14 @@ defmodule App do
           #{:ok, data} = Jason.encode(send_data)
 
           #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.at(state, pos+1), send_data)
+          AppTCPServer.sendTCPData(Enum.random(state), send_data)
 
           #prepare struct to be sent and serialize the same to JSON
           send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, full_range: full_range, parentRef: "#{inspect self()}"}
           #{:ok, data} = Jason.encode(send_data)
 
           #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.at(state, pos), send_data)
+          AppTCPServer.sendTCPData(Enum.random(state), send_data)
 
           #wait for message to be received from both the servers
           Map.merge(receive(), receive())
@@ -248,7 +248,7 @@ defmodule App do
           send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, full_range: full_range, endNum: endNum, parentRef: "#{inspect self()}"}
 
           #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.at(state, rem(pos+1, server_count)), send_data)
+          AppTCPServer.sendTCPData(Enum.random(state), send_data)
 
           t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0, full_range])
           Map.merge(Task.await(t1, 1000000), receive())
