@@ -178,6 +178,7 @@ defmodule App do
     receive do
       {_a, {:response, msg}} -> msg
       {:response, msg} -> msg
+      {_a, msg} -> msg
       msg ->  msg
     end
   end
@@ -209,53 +210,55 @@ defmodule App do
         mid_low = startNum + ((endNum - startNum)>>>1)
         mid_high = mid_low + 1
 
+        #IO.puts(server_count)
         if (server_count == 0) do
-          t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
-          t2=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
-          Map.merge(Task.await(t2,100000), Task.await(t1, 1000000))
-        end
-
-        #send both request to server
-        x=if (pos < server_count-1) do
-
-
-          #prepare struct to be sent and serialize the same to JSON
-          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: startNum, endNum: mid_low, full_range: full_range, parentRef: "#{inspect self()}"}
-          #{:ok, data} = Jason.encode(send_data)
-
-          #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.random(state), send_data)
-
-          #prepare struct to be sent and serialize the same to JSON
-          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, full_range: full_range, parentRef: "#{inspect self()}"}
-          #{:ok, data} = Jason.encode(send_data)
-
-          #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.random(state), send_data)
-
-          #wait for message to be received from both the servers
+          Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
+          Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, pos, full_range])
           Map.merge(receive(), receive())
-
         else
-          %{}
-        end
 
-        #send one request to server and process one by self
-        x =
-        if (pos >= server_count-1) do
+          #send both request to server
+          x=if (pos < server_count-1) do
 
-          #prepare struct to be sent and serialize the same to JSON
-          send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, full_range: full_range, endNum: endNum, parentRef: "#{inspect self()}"}
 
-          #send the request to the remote server for processing
-          AppTCPServer.sendTCPData(Enum.random(state), send_data)
+            #prepare struct to be sent and serialize the same to JSON
+            send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: startNum, endNum: mid_low, full_range: full_range, parentRef: "#{inspect self()}"}
+            #{:ok, data} = Jason.encode(send_data)
 
-          t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0, full_range])
-          Map.merge(Task.await(t1, 1000000), receive())
-        else
+            #send the request to the remote server for processing
+            AppTCPServer.sendTCPData(Enum.random(state), send_data)
+
+            #prepare struct to be sent and serialize the same to JSON
+            send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, endNum: endNum, full_range: full_range, parentRef: "#{inspect self()}"}
+            #{:ok, data} = Jason.encode(send_data)
+
+            #send the request to the remote server for processing
+            AppTCPServer.sendTCPData(Enum.random(state), send_data)
+
+            #wait for message to be received from both the servers
+            Map.merge(receive(), receive())
+
+          else
+            %{}
+          end
+
+          #send one request to server and process one by self
+          x =
+          if (pos >= server_count-1) do
+
+            #prepare struct to be sent and serialize the same to JSON
+            send_data = %FindVampTCPStruct{operationName: "findVampireNumbers", startNum: mid_high, full_range: full_range, endNum: endNum, parentRef: "#{inspect self()}"}
+
+            #send the request to the remote server for processing
+            AppTCPServer.sendTCPData(Enum.random(state), send_data)
+
+            t1=Task.async(App, :findVampireNumbers , [startNum, mid_low, self(), state, server_count, 0, full_range])
+            Map.merge(Task.await(t1, 1000000), receive())
+          else
+            x
+          end
           x
         end
-        x
       else
         res =
           for i <- startNum..endNum do

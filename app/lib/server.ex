@@ -39,7 +39,7 @@ defmodule AppTCPServer do
 
   @impl true
   def init(init_arg) do
-    Process.flag(:trap_exit, false)
+    #Process.flag(:trap_exit, false)
     {:ok, init_arg}
   end
 
@@ -132,7 +132,7 @@ defmodule AppTCPServer do
     #peer_ip = to_string(peer_ip)
     Logger.info("Connected to #{inspect peer_ip}:#{port}")
     spawn fn ->
-      Process.flag(:trap_exit, true)
+      #Process.flag(:trap_exit, true)
       GenServer.call(genserver_pid, {:addServer, client}, 100000)
       serveMe(client, genserver_pid, "")
     end
